@@ -68,9 +68,9 @@ def normalize_image(src: str) -> str:
 def scrape_page(page, url: str) -> list[dict]:
     entries = []
     try:
-        page.goto(url, wait_until="networkidle", timeout=30000)
-        time.sleep(2)
-        page.wait_for_selector("ul[data-role='listview']", timeout=10000)
+        page.goto(url, wait_until="networkidle", timeout=60000)
+        time.sleep(4)
+        page.wait_for_selector("ul[data-role='listview']", timeout=20000)
 
         items = page.query_selector_all("li.ui-li-has-thumb")
         print(f"  ✓ Found {len(items)} raw items on: {url}")
@@ -130,15 +130,42 @@ def scrape_all(pages: int = DEFAULT_PAGES, today_only: bool = False) -> list[dic
     print(f"   Today: {today_str}\n")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+            ]
+        )
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
+                "Chrome/124.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 800},
+            locale="en-US",
+            timezone_id="Africa/Nairobi",
+            java_script_enabled=True,
+            has_touch=False,
+            is_mobile=False,
+            extra_http_headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+            }
         )
+        # Mask automation signals
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        """)
+
         browser_page = context.new_page()
 
         for page_num in range(1, pages + 1):
