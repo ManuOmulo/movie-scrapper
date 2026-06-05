@@ -1,11 +1,9 @@
-name: 🎬 Daily Movie Scraper
+python3 << 'PYEOF'
+content = """name: 🎬 Daily Movie Scraper
 
 on:
   schedule:
-    # 07:00 UTC = 10:00 AM Nairobi time (UTC+3)
-    - cron: '0 10 * * *'
-
-  # Manual trigger with optional inputs
+    - cron: '0 7 * * *'
   workflow_dispatch:
     inputs:
       pages:
@@ -24,8 +22,6 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-22.04
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: write
 
@@ -44,8 +40,9 @@ jobs:
 
       - name: Install Playwright + Chromium
         run: |
+          pip install playwright>=1.49.0
           playwright install chromium
-          sudo playwright install-deps chromium
+          playwright install-deps chromium
 
       - name: Run scraper and send email
         env:
@@ -72,3 +69,9 @@ jobs:
             git commit -m "🎬 Daily update: $(date +'%Y-%m-%d')"
             git push
           fi
+"""
+
+with open('.github/workflows/scrape.yml', 'w') as f:
+    f.write(content)
+print("Done — file written successfully")
+PYEOF
