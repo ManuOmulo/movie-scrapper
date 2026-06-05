@@ -1,5 +1,4 @@
-python3 << 'PYEOF'
-content = """name: 🎬 Daily Movie Scraper
+name: 🎬 Daily Movie Scraper
 
 on:
   schedule:
@@ -40,15 +39,14 @@ jobs:
 
       - name: Install Playwright + Chromium
         run: |
-          pip install playwright>=1.49.0
           playwright install chromium
           playwright install-deps chromium
 
       - name: Run scraper and send email
         env:
-          GMAIL_ADDRESS:      ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          NOTIFY_EMAIL:       ${{ secrets.NOTIFY_EMAIL }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           PAGES=${{ github.event.inputs.pages || '2' }}
           SKIP_EMAIL=${{ github.event.inputs.skip_email || 'false' }}
@@ -69,9 +67,3 @@ jobs:
             git commit -m "🎬 Daily update: $(date +'%Y-%m-%d')"
             git push
           fi
-"""
-
-with open('.github/workflows/scrape.yml', 'w') as f:
-    f.write(content)
-print("Done — file written successfully")
-PYEOF
