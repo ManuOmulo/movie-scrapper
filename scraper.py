@@ -63,6 +63,33 @@ def normalize_image(src: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────
+# PROXY
+# ─────────────────────────────────────────────────────────────────
+def get_proxy_config() -> dict | None:
+    """
+    Reads PROXY_URL from environment variable.
+    Expected format: username:password@host:port
+    Returns a Playwright proxy config dict, or None if not set.
+    """
+    proxy_url = os.environ.get("PROXY_URL", "").strip()
+    if not proxy_url:
+        return None
+
+    try:
+        credentials, server = proxy_url.split("@")
+        username, password  = credentials.split(":", 1)
+        return {
+            "server":   f"http://{server}",
+            "username": username,
+            "password": password,
+        }
+    except ValueError:
+        print("⚠️  PROXY_URL format is invalid. Expected: username:password@host:port")
+        print("   Continuing without proxy...")
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────
 # SCRAPER
 # ─────────────────────────────────────────────────────────────────
 def scrape_page(page, url: str) -> list[dict]:
@@ -126,12 +153,16 @@ def scrape_all(pages: int = DEFAULT_PAGES, today_only: bool = False) -> list[dic
     today_str   = date.today().strftime("%Y/%m/%d")
     all_entries = []
 
+    proxy_config = get_proxy_config()
+
     print(f"\n🎬 Scraping {pages} page(s) — TV Series & Movies only")
-    print(f"   Today: {today_str}\n")
+    print(f"   Today: {today_str}")
+    print(f"   Proxy: {'enabled ✓' if proxy_config else 'not set (running direct)'}\n")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
+            proxy=proxy_config,  # None means no proxy — Playwright ignores it
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
