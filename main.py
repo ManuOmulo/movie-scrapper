@@ -4,7 +4,7 @@ main.py — Entry point called by GitHub Actions and the CLI
 
 import sys
 from scraper import scrape_all, save_data
-from notify import send_email
+from notify import send_email, send_no_update_email
 
 if __name__ == "__main__":
     import argparse
