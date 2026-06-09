@@ -2,10 +2,7 @@ name: 🎬 Daily Movie Scraper
 
 on:
   schedule:
-    # Arbitrary minute avoids GitHub Actions queue spikes at top of hour
-    # 18 minutes past 7 UTC = 10:18 AM Nairobi time (UTC+3)
-    - cron: '18 10 * * *'
-
+    - cron: '18 10 * * *'   # 6:18 PM Nairobi time (UTC+3)
   workflow_dispatch:
     inputs:
       skip_email:
@@ -19,7 +16,7 @@ on:
 
 jobs:
   scrape:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
@@ -36,17 +33,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Playwright + Chromium
-        run: |
-          playwright install chromium
-          playwright install-deps chromium
-
       - name: Run scraper and send email
         env:
+          SCRAPERAPI_KEY:     ${{ secrets.SCRAPERAPI_KEY }}
           GMAIL_ADDRESS:      ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NOTIFY_EMAIL:       ${{ secrets.NOTIFY_EMAIL }}
-          PROXY_URL:          ${{ secrets.PROXY_URL }}
         run: |
           SKIP_EMAIL=${{ github.event.inputs.skip_email || 'false' }}
           if [ "$SKIP_EMAIL" = "true" ]; then
