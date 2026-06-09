@@ -130,6 +130,7 @@ def send_email(entries: list[dict] = None):
     today = str(date.today())
     total = len(entries)
 
+    # If no entries, don't send email
     if total == 0:
         print("ℹ️  Email: No new entries today — skipping.")
         return

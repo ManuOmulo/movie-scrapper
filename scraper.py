@@ -21,7 +21,7 @@ import requests
 BASE_URL        = "https://newtoxic.com/recently_added/"
 SCRAPERAPI_URL  = "https://api.scraperapi.com/"
 OUTPUT_FILE     = "data/movies.json"
-MAX_PAGES       = 2  # Safety cap
+MAX_PAGES       = 5  # Safety cap
 
 # ─────────────────────────────────────────────────────────────────
 # CATEGORY MATCHING
