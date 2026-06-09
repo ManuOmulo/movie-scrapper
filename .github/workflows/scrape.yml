@@ -2,13 +2,12 @@ name: 🎬 Daily Movie Scraper
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    # Arbitrary minute avoids GitHub Actions queue spikes at top of hour
+    # 18 minutes past 7 UTC = 10:18 AM Nairobi time (UTC+3)
+    - cron: '18 10 * * *'
+
   workflow_dispatch:
     inputs:
-      pages:
-        description: 'Number of pages to scrape'
-        required: false
-        default: '2'
       skip_email:
         description: 'Skip sending email?'
         required: false
@@ -49,12 +48,11 @@ jobs:
           NOTIFY_EMAIL:       ${{ secrets.NOTIFY_EMAIL }}
           PROXY_URL:          ${{ secrets.PROXY_URL }}
         run: |
-          PAGES=${{ github.event.inputs.pages || '2' }}
           SKIP_EMAIL=${{ github.event.inputs.skip_email || 'false' }}
           if [ "$SKIP_EMAIL" = "true" ]; then
-            python main.py --pages $PAGES --no-email
+            python main.py --no-email
           else
-            python main.py --pages $PAGES
+            python main.py
           fi
 
       - name: Commit updated data

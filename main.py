@@ -3,16 +3,12 @@ main.py — Entry point called by GitHub Actions and the CLI
 """
 
 import sys
-import argparse
-from scraper import scrape_all, save_data, DEFAULT_PAGES
+from scraper import scrape_all, save_data
 from notify import send_email
 
 if __name__ == "__main__":
+    import argparse
     parser = argparse.ArgumentParser(description="NewToxic.com scraper")
-    parser.add_argument("--pages", type=int, default=DEFAULT_PAGES,
-                        help=f"Number of pages to scrape (default: {DEFAULT_PAGES})")
-    parser.add_argument("--today-only", action="store_true",
-                        help="Only save entries dated today")
     parser.add_argument("--no-email", action="store_true",
                         help="Skip sending the email notification")
     args = parser.parse_args()
@@ -20,18 +16,18 @@ if __name__ == "__main__":
     print("=" * 55)
     print("  🎬  NewToxic Daily Scraper")
     print("=" * 55)
-    print(f"  Pages   : {args.pages}")
+    print(f"  Mode    : date-based (stops at yesterday's entries)")
     print(f"  Email   : {'disabled' if args.no_email else 'enabled'}")
     print("=" * 55)
 
-    # 1. Scrape
-    entries = scrape_all(pages=args.pages, today_only=args.today_only)
+    # 1. Scrape today's entries across however many pages needed
+    entries = scrape_all()
 
     if not entries:
         print("\n❌ No entries scraped.")
         sys.exit(1)
 
-    # 2. Save — returns only the newly added entries
+    # 2. Save — returns only newly added entries
     new_entries = save_data(entries)
 
     if new_entries:
@@ -44,7 +40,7 @@ if __name__ == "__main__":
     else:
         print("\nℹ️  No new entries since last run.")
 
-    # 3. Email — sends today's new entries
+    # 3. Email
     if not args.no_email:
         print("\n📬 Sending email...")
         send_email(entries=new_entries)

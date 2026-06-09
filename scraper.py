@@ -1,52 +1,83 @@
 """
 newtoxic.com - Latest Updates Scraper
-Filters to TV Series and Movies only.
+Filters to TV Series, Movies and Cartoons only.
+Scrapes by today's date — stops as soon as yesterday's entries appear.
 """
 
 import json
 import os
+import re
 import time
+import random
 import argparse
-from datetime import date
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 # ─────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────
-BASE_URL      = "https://newtoxic.com/recently_added/"
-DEFAULT_PAGES = 2
-OUTPUT_FILE   = "data/movies.json"
+BASE_URL     = "https://newtoxic.com/recently_added/"
+OUTPUT_FILE  = "data/movies.json"
+MAX_PAGES    = 10  # Safety cap — will stop earlier once it hits yesterday's date
 
-# Only these category codes will be saved — everything else is dropped
-ALLOWED_CATEGORIES = {"TV", "MOV"}
+# Heavy assets to block
+BLOCKED_RESOURCES = {"image", "media", "font", "stylesheet"}
 
-CATEGORY_MAP = {
-    "TV":  "TV Series",
+# ─────────────────────────────────────────────────────────────────
+# CATEGORY MATCHING
+# ─────────────────────────────────────────────────────────────────
+# Regex: matches anything that STARTS with "TV" (TV, TV/S02, TV/S02-S03, etc.)
+TV_PATTERN = re.compile(r'^TV', re.IGNORECASE)
+
+EXACT_CATEGORIES = {
     "MOV": "Movie",
+    "CAR": "Cartoon",
 }
+
+def resolve_category(cat_code: str) -> str | None:
+    """
+    Returns the display category name or None if not in our allowed list.
+    TV is matched by regex so TV/S02, TV/S02-S03 etc. all resolve to 'TV Series'.
+    MOV and CAR are matched exactly.
+    """
+    code = cat_code.strip()
+
+    if TV_PATTERN.match(code):
+        return "TV Series"
+
+    upper = code.upper()
+    if upper in EXACT_CATEGORIES:
+        return EXACT_CATEGORIES[upper]
+
+    return None  # Not in our allowed list — skip
+
 
 # ─────────────────────────────────────────────────────────────────
 # PARSING
 # ─────────────────────────────────────────────────────────────────
 def parse_entry_text(raw_text: str) -> dict | None:
     """
-    Parse anchor text like "The Chi -> TV -> S08E03".
-    Returns None if the category is not in ALLOWED_CATEGORIES.
+    Parse anchor text like:
+      "The Chi -> TV -> S08E03"
+      "Blood Sisters -> TV/S02 -> Complete"
+      "Gwed 2024 -> TV/S02 - S03 -> Complete"
+      "Some Movie -> MOV -> 2024"
+      "SpongeBob -> CAR -> S14E05"
+    Returns None if category is not in our allowed list.
     """
-    parts = [p.strip() for p in raw_text.split("->")]
+    parts    = [p.strip() for p in raw_text.split("->")]
+    title    = parts[0].strip() if len(parts) > 0 else raw_text.strip()
+    cat_code = parts[1].strip() if len(parts) > 1 else ""
+    episode  = parts[2].strip() if len(parts) > 2 else ""
 
-    title    = parts[0] if len(parts) > 0 else raw_text.strip()
-    cat_code = parts[1].strip().upper() if len(parts) > 1 else ""
-    episode  = parts[2] if len(parts) > 2 else ""
-
-    # Drop anything that isn't TV or Movie
-    if cat_code not in ALLOWED_CATEGORIES:
+    category = resolve_category(cat_code)
+    if category is None:
         return None
 
     return {
-        "title":    title.strip(),
-        "category": CATEGORY_MAP[cat_code],
-        "episode":  episode.strip(),
+        "title":    title,
+        "category": category,
+        "episode":  episode,
     }
 
 
@@ -62,29 +93,38 @@ def normalize_image(src: str) -> str:
     return src if src.startswith("http") else "https://newtoxic.com" + src
 
 
+def parse_site_date(raw_date: str) -> str:
+    """Normalize site date '2026/06/05' to 'YYYY/MM/DD' after stripping arrows."""
+    return raw_date.replace(" ->", "").strip()
+
+
 # ─────────────────────────────────────────────────────────────────
 # PROXY
 # ─────────────────────────────────────────────────────────────────
 def get_proxy_config() -> dict | None:
     """
     Reads PROXY_URL from environment variable.
-    Expected format: username:password@host:port
-    Returns a Playwright proxy config dict, or None if not set.
+    Supports multiple proxies as comma-separated list — picks one randomly.
+    Format: username:password@host:port
     """
-    proxy_url = os.environ.get("PROXY_URL", "").strip()
-    if not proxy_url:
+    proxy_env = os.environ.get("PROXY_URL", "").strip()
+    if not proxy_env:
         return None
+
+    proxies   = [p.strip() for p in proxy_env.split(",") if p.strip()]
+    proxy_url = random.choice(proxies)
 
     try:
         credentials, server = proxy_url.split("@")
         username, password  = credentials.split(":", 1)
+        print(f"   Proxy : {server}")
         return {
             "server":   f"http://{server}",
             "username": username,
             "password": password,
         }
     except ValueError:
-        print("⚠️  PROXY_URL format is invalid. Expected: username:password@host:port")
+        print("⚠️  PROXY_URL format invalid. Expected: user:pass@host:port")
         print("   Continuing without proxy...")
         return None
 
@@ -92,11 +132,27 @@ def get_proxy_config() -> dict | None:
 # ─────────────────────────────────────────────────────────────────
 # SCRAPER
 # ─────────────────────────────────────────────────────────────────
-def scrape_page(page, url: str) -> list[dict]:
-    entries = []
+def block_heavy_assets(route):
+    if route.request.resource_type in BLOCKED_RESOURCES:
+        route.abort()
+    else:
+        route.continue_()
+
+
+def scrape_page(page, url: str) -> tuple[list[dict], bool]:
+    """
+    Scrape a single page.
+    Returns (entries, stop_scraping).
+    stop_scraping=True means we hit yesterday's date — caller should stop.
+    """
+    entries      = []
+    stop_scraping = False
+    today_str     = date.today().strftime("%Y/%m/%d")
+    yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y/%m/%d")
+
     try:
-        page.goto(url, wait_until="networkidle", timeout=60000)
-        time.sleep(4)
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        time.sleep(3)
         page.wait_for_selector("ul[data-role='listview']", timeout=20000)
 
         items = page.query_selector_all("li.ui-li-has-thumb")
@@ -105,20 +161,32 @@ def scrape_page(page, url: str) -> list[dict]:
         for item in items:
             try:
                 entry = extract_entry(item)
-                if entry:
-                    entries.append(entry)
+                if not entry:
+                    continue
+
+                entry_date = entry["date_updated"]
+
+                # Stop as soon as we see yesterday's (or older) date
+                if entry_date and entry_date != today_str:
+                    print(f"  → Hit date {entry_date} (not today) — stopping.")
+                    stop_scraping = True
+                    break
+
+                entries.append(entry)
+
             except Exception as e:
                 print(f"  ⚠  Skipping one item: {e}")
 
     except PlaywrightTimeout:
         print(f"  ✗ Timeout loading: {url}")
 
-    return entries
+    return entries, stop_scraping
 
 
 def extract_entry(item) -> dict | None:
     date_el  = item.query_selector("p")
-    raw_date = date_el.inner_text().strip().replace(" ->", "").strip() if date_el else ""
+    raw_date = date_el.inner_text().strip() if date_el else ""
+    raw_date = parse_site_date(raw_date)
 
     anchor = item.query_selector("a")
     if not anchor:
@@ -132,7 +200,7 @@ def extract_entry(item) -> dict | None:
     episode_alt = img_el.get_attribute("alt") or "" if img_el else ""
 
     parsed = parse_entry_text(raw_text)
-    if parsed is None:  # filtered out category
+    if parsed is None:
         return None
 
     if not parsed["episode"] and episode_alt:
@@ -149,25 +217,31 @@ def extract_entry(item) -> dict | None:
     }
 
 
-def scrape_all(pages: int = DEFAULT_PAGES, today_only: bool = False) -> list[dict]:
-    today_str   = date.today().strftime("%Y/%m/%d")
-    all_entries = []
-
+def scrape_all() -> list[dict]:
+    """
+    Scrape pages until we hit yesterday's date or reach MAX_PAGES.
+    No fixed page count — driven entirely by date.
+    """
+    today_str    = date.today().strftime("%Y/%m/%d")
+    all_entries  = []
     proxy_config = get_proxy_config()
 
-    print(f"\n🎬 Scraping {pages} page(s) — TV Series & Movies only")
-    print(f"   Today: {today_str}")
-    print(f"   Proxy: {'enabled ✓' if proxy_config else 'not set (running direct)'}\n")
+    print(f"\n🎬 Scraping today's updates — TV Series, Movies & Cartoons")
+    print(f"   Today    : {today_str}")
+    print(f"   Stopping : when entries older than today appear")
+    print(f"   Proxy    : {'enabled ✓' if proxy_config else 'not set (running direct)'}\n")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
-            proxy=proxy_config,  # None means no proxy — Playwright ignores it
+            proxy=proxy_config,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
             ]
         )
         context = browser.new_context(
@@ -190,35 +264,37 @@ def scrape_all(pages: int = DEFAULT_PAGES, today_only: bool = False) -> list[dic
                 "Upgrade-Insecure-Requests": "1",
             }
         )
-        # Mask automation signals
         context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
             Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            window.chrome = { runtime: {} };
         """)
 
         browser_page = context.new_page()
+        browser_page.route("**/*", block_heavy_assets)
 
-        for page_num in range(1, pages + 1):
+        for page_num in range(1, MAX_PAGES + 1):
             url = BASE_URL if page_num == 1 else f"{BASE_URL}?page={page_num}"
-            print(f"📄 Page {page_num}/{pages}")
-            page_entries = scrape_page(browser_page, url)
+            print(f"📄 Page {page_num}")
 
-            if today_only:
-                today_entries = [e for e in page_entries if e["date_updated"] == today_str]
-                all_entries.extend(today_entries)
-                if len(today_entries) < len(page_entries):
-                    print(f"  → Reached older entries. Stopping early.")
-                    break
-            else:
-                all_entries.extend(page_entries)
+            page_entries, stop = scrape_page(browser_page, url)
+            all_entries.extend(page_entries)
 
-            if page_num < pages:
-                time.sleep(2)
+            if stop:
+                print(f"  ✓ Date boundary reached — done after {page_num} page(s).")
+                break
+
+            if page_num < MAX_PAGES:
+                delay = random.uniform(2, 5)
+                print(f"  ⏱  Waiting {delay:.1f}s...")
+                time.sleep(delay)
+        else:
+            print(f"⚠️  Reached MAX_PAGES ({MAX_PAGES}) safety cap.")
 
         browser.close()
 
-    print(f"\n✅ Kept {len(all_entries)} entries (TV Series & Movies only)")
+    print(f"\n✅ Kept {len(all_entries)} entries for today")
     return all_entries
 
 
@@ -258,11 +334,11 @@ def save_data(entries: list[dict]) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pages", type=int, default=DEFAULT_PAGES)
-    parser.add_argument("--today-only", action="store_true")
+    parser.add_argument("--today-only", action="store_true",
+                        help="Alias kept for backwards compatibility — scraping is always date-based now")
     args = parser.parse_args()
 
-    entries = scrape_all(pages=args.pages, today_only=args.today_only)
+    entries = scrape_all()
     if entries:
         save_data(entries)
     else:
