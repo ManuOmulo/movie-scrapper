@@ -151,5 +151,63 @@ def send_email(entries: list[dict] = None):
         print(f"❌ Email error: {e}")
 
 
+def send_no_update_email():
+    """Send a simple email when the site has no new entries yet."""
+    sender   = os.environ.get("GMAIL_ADDRESS")
+    password = os.environ.get("GMAIL_APP_PASSWORD")
+    receiver = os.environ.get("NOTIFY_EMAIL", sender)
+
+    if not sender or not password:
+        print("❌ Email: GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set.")
+        return
+
+    today = str(date.today())
+
+    msg            = MIMEMultipart("alternative")
+    msg["Subject"] = f"🎬 NewToxic — No new updates yet ({today})"
+    msg["From"]    = sender
+    msg["To"]      = receiver
+
+    plain = f"NewToxic Daily Scraper\n\nNo new entries found for {today} yet.\nThe site may not have updated. Try checking later at https://newtoxic.com/recently_added/"
+
+    html = f"""
+    <html><body style="margin:0;padding:20px;background:#f0f0f8;font-family:Arial,sans-serif;">
+      <div style="max-width:580px;margin:0 auto;background:#fff;
+                  border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.1);">
+        <div style="background:#1a1a2e;padding:28px 24px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">🎬</div>
+          <h1 style="color:#a1a5ff;margin:0;font-size:20px;">NewToxic Daily Update</h1>
+          <p style="color:#888;margin:8px 0 0;font-size:13px;">{today}</p>
+        </div>
+        <div style="padding:32px;text-align:center;">
+          <p style="font-size:40px;margin:0;">😴</p>
+          <p style="font-size:16px;color:#333;margin:16px 0 8px;font-weight:bold;">
+            No new entries yet
+          </p>
+          <p style="font-size:13px;color:#888;margin:0;">
+            The site hasn't posted today's updates yet.
+          </p>
+          <a href="https://newtoxic.com/recently_added/"
+             style="display:inline-block;margin-top:20px;padding:10px 24px;
+                    background:#1a1a2e;color:#a1a5ff;border-radius:6px;
+                    text-decoration:none;font-size:13px;">
+            Check manually →
+          </a>
+        </div>
+      </div>
+    </body></html>"""
+
+    msg.attach(MIMEText(plain, "plain"))
+    msg.attach(MIMEText(html, "html"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender, password)
+            server.sendmail(sender, receiver, msg.as_string())
+        print(f"✅ No-update email sent to {receiver}")
+    except Exception as e:
+        print(f"❌ Email error: {e}")
+
+
 if __name__ == "__main__":
     send_email()

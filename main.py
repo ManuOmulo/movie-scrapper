@@ -24,8 +24,11 @@ if __name__ == "__main__":
     entries = scrape_all()
 
     if not entries:
-        print("\n❌ No entries scraped.")
-        sys.exit(1)
+        print("\n ℹ️  No new entries found for today yet.")
+        if not args.no_email:
+            print("📬 Sending no-update email...")
+            send_no_update_email()
+        sys.exit(0)  # Exit cleanly — not a failure
 
     # 2. Save — returns only newly added entries
     new_entries = save_data(entries)
