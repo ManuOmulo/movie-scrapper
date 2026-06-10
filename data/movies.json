@@ -349,5 +349,23 @@
     "link": "https://newtoxic.com/new/1/Videos/TV-Series/The-Ranch.html",
     "thumbnail": "https://newtoxic.com/cms/sub_thumb/The Ranch.jpg",
     "date_scraped": "2026-06-10"
+  },
+  {
+    "title": "Kwa Baba",
+    "category": "TV Series",
+    "episode": "Complete",
+    "date_updated": "2026/06/10",
+    "link": "https://newtoxic.com/new/1/Videos/TV-Series/Kwa-Baba.html",
+    "thumbnail": "https://newtoxic.com/cms/sub_thumb/Kwa Baba.jpg",
+    "date_scraped": "2026-06-10"
+  },
+  {
+    "title": "Levels",
+    "category": "TV Series",
+    "episode": "Complete",
+    "date_updated": "2026/06/10",
+    "link": "https://newtoxic.com/new/1/Videos/TV-Series/Levels.html",
+    "thumbnail": "https://newtoxic.com/cms/sub_thumb/Levels.jpg",
+    "date_scraped": "2026-06-10"
   }
 ]
