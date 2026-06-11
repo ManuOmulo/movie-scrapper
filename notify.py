@@ -9,8 +9,10 @@ from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from scraper import OUTPUT_FILE
 
-def load_todays_entries(filepath="data/movies.json") -> list[dict]:
+
+def load_todays_entries(filepath=OUTPUT_FILE) -> list[dict]:
     """Return only entries scraped today."""
     today = str(date.today())
     if not os.path.exists(filepath):

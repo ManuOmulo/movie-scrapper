@@ -18,10 +18,10 @@ import requests
 # ─────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────
-BASE_URL        = "https://newtoxic.com/recently_added/"
-SCRAPERAPI_URL  = "https://api.scraperapi.com/"
-OUTPUT_FILE     = "data/movies.json"
-MAX_PAGES       = 5  # Safety cap
+BASE_URL = "https://newtoxic.com/recently_added/"
+SCRAPERAPI_URL = "https://api.scraperapi.com/"
+OUTPUT_FILE = f"data/{date.today().isoformat()}.json"
+MAX_PAGES = 5  # Safety cap
 
 # ─────────────────────────────────────────────────────────────────
 # CATEGORY MATCHING
@@ -30,7 +30,9 @@ TV_PATTERN = re.compile(r'^TV', re.IGNORECASE)
 
 EXACT_CATEGORIES = {
     "MOV": "Movie",
-    "CAR": "Cartoon",
+    "Cartoons": "Cartoon",
+    "WWE": "WWE",
+    "Animation": "Animation"
 }
 
 def resolve_category(cat_code: str) -> str | None:
@@ -105,16 +107,16 @@ def fetch_page(url: str, api_key: str) -> BeautifulSoup | None:
 def scrape_page(url: str, api_key: str) -> tuple[list[dict], bool]:
     """
     Scrape a single page via ScraperAPI.
-    Returns (entries, stop_scraping).
-    stop_scraping=True when we hit entries older than today.
+    - Adds ALL entries regardless of date
+    - Stops when the entire page has no entry dated today (meaning we've gone past today's update batch)
     """
-    entries       = []
-    stop_scraping = False
     today_str     = date.today().strftime("%Y/%m/%d")
+    yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y/%m/%d")
+    all_entries   = []
 
     soup = fetch_page(url, api_key)
     if not soup:
-        return entries, stop_scraping
+        return [], False
 
     items = [li for li in soup.select("ul[data-role='listview'] li") if li.select_one("a")]
     print(f"  ✓ Found {len(items)} raw items on: {url}")
@@ -122,23 +124,30 @@ def scrape_page(url: str, api_key: str) -> tuple[list[dict], bool]:
     for item in items:
         try:
             entry = extract_entry(item)
-            if not entry:
-                continue
-
-            entry_date = entry["date_updated"]
-
-            # Stop as soon as we see an entry older than today
-            if entry_date and entry_date != today_str:
-                print(f"  → Hit date {entry_date} (not today) — stopping.")
-                stop_scraping = True
-                break
-
-            entries.append(entry)
-
+            if entry:
+                all_entries.append(entry)
         except Exception as e:
             print(f"  ⚠  Skipping one item: {e}")
 
-    return entries, stop_scraping
+    # Separate today's vs old entries
+    today_entries = [e for e in all_entries if e["date_updated"] == today_str]
+    old_entries   = [e for e in all_entries if e["date_updated"] != today_str and
+                     e["date_updated"] != yesterday_str]
+    yest_entries  = [e for e in all_entries if e["date_updated"] == yesterday_str]
+
+    print(f"  → Today: {len(today_entries)} | Old (keep): {len(old_entries)} | Yesterday (skip): {len(yest_entries)}")
+
+    # Stop if there are zero today entries on this page —
+    # means we've moved fully past today's batch
+    stop_scraping = len(today_entries) == 0
+
+    if stop_scraping:
+        print(f"  → No today's entries on this page — stopping.")
+
+    # Return today's entries + old mixed-in entries, but exclude yesterday and older
+    entries_to_save = today_entries + old_entries
+
+    return entries_to_save, stop_scraping
 
 
 def extract_entry(item) -> dict | None:
