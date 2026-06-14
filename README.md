@@ -1,96 +1,90 @@
 # 🎬 NewToxic Daily Scraper
 
-Automatically scrapes the latest movie and series updates from [newtoxic.com](https://newtoxic.com/recently_added/) every day using **Playwright** + **GitHub Actions**.
+Automatically scrapes the latest movie and series updates from [newtoxic.com](https://newtoxic.com/recently_added/) and sends email notifications.
 
-Data is saved to `data/movies.json` and committed back to this repo automatically.
+**Features:**
+- Scrapes today's updates (TV Series, Movies, Cartoons only)
+- Date-based storage: `data/YYYY-MM-DD.json`
+- Smart append: New entries are added to the same day's file
+- Email notifications via Gmail
+- Automatic cleanup of files older than 30 days
+- Stops when reaching yesterday's entries
 
 ---
 
-## 🚀 Setup (One-Time)
+## 🚀 Setup
 
-### 1. Install dependencies locally
+### 1. Install dependencies
 ```bash
 pip install -r requirements.txt
-playwright install chromium
-playwright install-deps chromium   # Linux only
 ```
 
-### 2. Discover the correct CSS selectors (REQUIRED first step)
-The site uses JS rendering, so you need to inspect its actual HTML to find
-the right selectors before the scraper will work properly.
-
+### 2. Set environment variables
+Required for ScraperAPI and email notifications:
 ```bash
-python scraper.py --discover
+export SCRAPERAPI_KEY="your_scraperapi_key"
+export GMAIL_ADDRESS="your_email@gmail.com"
+export GMAIL_APP_PASSWORD="your_app_password"
+export NOTIFY_EMAIL="recipient@example.com"  # Optional, defaults to sender
 ```
 
-This will:
-- Open the site in a headless browser
-- Save the full HTML to `discovered_html.html`
-- Print candidate container elements to the terminal
-
-Open `discovered_html.html` in your browser, inspect the movie card structure,
-then update the `SELECTORS` dictionary in `scraper.py` accordingly.
-
-### 3. Test the scraper locally
+### 3. Run locally
 ```bash
 python main.py
 ```
 
-Check `data/movies.json` for output.
-
-### 4. Push to GitHub
+Skip email with:
 ```bash
-git init
-git add .
-git commit -m "Initial scraper setup"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/movie-scraper.git
-git push -u origin main
+python main.py --no-email
 ```
-
-GitHub Actions will automatically pick up `.github/workflows/scrape.yml`
-and start running on the daily schedule.
 
 ---
 
 ## ⚙️ Configuration
 
-All settings are at the top of `scraper.py`:
+Settings in `scraper.py`:
 
 | Setting | Default | Description |
 |---|---|---|
-| `BASE_URL` | `newtoxic.com/recently_added/` | The page to scrape |
-| `PAGES_TO_SCRAPE` | `2` | How many pages to scrape per run |
-| `SELECTORS` | (guesses) | CSS selectors — **update after running --discover** |
-
-### Changing the schedule
-Edit the cron expression in `.github/workflows/scrape.yml`:
-```yaml
-- cron: '0 7 * * *'   # 07:00 UTC = 10:00 AM Nairobi (UTC+3)
-```
-Use [crontab.guru](https://crontab.guru) to build your preferred schedule.
+| `BASE_URL` | `newtoxic.com/recently_added/` | Page to scrape |
+| `MAX_PAGES` | `5` | Safety cap for pages to scrape |
 
 ---
 
 ## 📁 Output Format
 
-`data/movies.json` — array of entries:
+Creates daily JSON files: `data/YYYY-MM-DD.json`
+
 ```json
 [
   {
     "title": "Movie Title",
-    "type": "Movie",
-    "year": "2024",
+    "category": "Movie",
+    "episode": "E01",
+    "date_updated": "2024/06/14",
     "link": "https://newtoxic.com/...",
-    "image": "https://...",
-    "date_scraped": "2024-06-04"
+    "thumbnail": "https://...",
+    "date_scraped": "2024-06-14"
   }
 ]
 ```
 
+**Behavior:**
+- First run of the day: Creates new file with today's date
+- Subsequent runs: Appends only new entries to the same file
+- Deduplicates by (title, date_updated, episode)
+
 ---
 
-## 🔧 Manual Trigger
+## 📧 Email Notifications
 
-Go to your repo → **Actions** tab → **Daily Movie Scraper** → **Run workflow**
-to trigger a scrape immediately without waiting for the schedule.
+- Sends email with new entries since last run
+- Sends "no update" email if site hasn't posted today
+- HTML + plain text format
+- Grouped by category (Movies, TV Series, Cartoons)
+
+---
+
+## 🧹 Cleanup
+
+Automatically deletes JSON files older than 30 days after each run.
