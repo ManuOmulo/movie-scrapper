@@ -26,35 +26,34 @@ MAX_PAGES = 5  # Safety cap
 # ─────────────────────────────────────────────────────────────────
 # CATEGORY MATCHING
 # ─────────────────────────────────────────────────────────────────
-TV_PATTERN = re.compile(r'^TV', re.IGNORECASE)
+def resolve_category(href: str) -> str | None:
+    if not href:
+        return None
 
-EXACT_CATEGORIES = {
-    "MOV": "Movie",
-    "Cartoons": "Cartoon",
-    "WWE": "WWE",
-    "Animation": "Animation"
-}
+    href = href.lower()
 
-def resolve_category(cat_code: str) -> str | None:
-    code = cat_code.strip()
-    if TV_PATTERN.match(code):
+    if "/tv-series/" in href:
         return "TV Series"
-    upper = code.upper()
-    if upper in EXACT_CATEGORIES:
-        return EXACT_CATEGORIES[upper]
+
+    if "/cartoons/" in href:
+        return "Cartoons"
+
+    if "/movie/" in href:
+        return "Movie"
+
     return None
 
 
 # ─────────────────────────────────────────────────────────────────
 # PARSING
 # ─────────────────────────────────────────────────────────────────
-def parse_entry_text(raw_text: str) -> dict | None:
+def parse_entry_text(raw_text: str, href) -> dict | None:
     parts    = [p.strip() for p in raw_text.split("->")]
     title    = parts[0].strip() if len(parts) > 0 else raw_text.strip()
     cat_code = parts[1].strip() if len(parts) > 1 else ""
     episode  = parts[2].strip() if len(parts) > 2 else ""
 
-    category = resolve_category(cat_code)
+    category = resolve_category(href)
     if category is None:
         return None
 
@@ -145,7 +144,7 @@ def scrape_page(url: str, api_key: str) -> tuple[list[dict], bool]:
         print(f"  → No today's entries on this page — stopping.")
 
     # Return today's entries + old mixed-in entries, but exclude yesterday and older
-    entries_to_save = today_entries + old_entries
+    entries_to_save = today_entries
 
     return entries_to_save, stop_scraping
 
@@ -166,7 +165,8 @@ def extract_entry(item) -> dict | None:
     img_src     = img_el.get("src", "") if img_el else ""
     episode_alt = img_el.get("alt", "") if img_el else ""
 
-    parsed = parse_entry_text(raw_text)
+    parsed = parse_entry_text(raw_text, href)
+
     if parsed is None:
         return None
 

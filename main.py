@@ -5,6 +5,7 @@ main.py — Entry point called by GitHub Actions and the CLI
 import sys
 from scraper import scrape_all, save_data
 from notify import send_email, send_no_update_email
+from cleanup import clean_up
 
 if __name__ == "__main__":
     import argparse
@@ -47,5 +48,9 @@ if __name__ == "__main__":
     if not args.no_email:
         print("\n📬 Sending email...")
         send_email(entries=new_entries)
+
+    # 4. Clean up old files
+    print("\n🧹 Cleaning up old files...")
+    clean_up()
 
     print("\n✅ Done!")
